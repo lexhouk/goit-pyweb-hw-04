@@ -11,7 +11,7 @@ from threading import Thread
 from urllib.parse import unquote_plus, urlparse
 
 ROOT = Path('front-init')
-ADDRESS = 'localhost', 5000
+ADDRESS = '127.0.0.1', 5000
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -109,7 +109,7 @@ class SocketServer(Server):
 def main() -> None:
     basicConfig(level=INFO, format='%(threadName)s: %(message)s')
 
-    WebServer('HTTP', ADDRESS[0], 3000)
+    WebServer('HTTP', '0.0.0.0', 3000)
     SocketServer('Socket', *ADDRESS)
 
 
