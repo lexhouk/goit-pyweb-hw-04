@@ -1,12 +1,17 @@
+from abc import ABC
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from mimetypes import guess_type
-from pathlib import Path
-from urllib.parse import unquote_plus, urlparse
 from json import dump, load
 from json.decoder import JSONDecodeError
-from datetime import datetime
+from logging import INFO, basicConfig, info
+from mimetypes import guess_type
+from pathlib import Path
+from socket import AF_INET, SOCK_DGRAM, socket
+from threading import Thread
+from urllib.parse import unquote_plus, urlparse
 
 ROOT = Path('front-init')
+ADDRESS = 'localhost', 5000
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -29,45 +34,83 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         if size := self.headers.get('Content-Length'):
-            items = self.rfile.read(int(size)).decode().split('&')
-            items = [item.split('=') for item in items]
-            items = {key: unquote_plus(value) for key, value in items if value}
-
-            if items:
-                if (path := ROOT.joinpath('storage/data.json')).exists():
-                    with open(path, encoding='utf-8') as file:
-                        try:
-                            data = load(file)
-                        except JSONDecodeError:
-                            ...
-
-                if 'data' not in locals() or type(data) is not dict:
-                    data = {}
-
-                # 2022-10-29 20:20:58.020261
-                data[datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')] = items
-
-                with open(path, 'w', encoding='utf-8') as file:
-                    dump(data, file, ensure_ascii=False, indent=2)
+            client = SocketServer.init()
+            client.sendto(self.rfile.read(int(size)), ADDRESS)
+            client.close()
 
         self.send_response(302)
         self.send_header('Location', '/message.html')
         self.end_headers()
 
 
+class Server(ABC, Thread):
+    def __init__(self, name: str, host: str, port: int) -> None:
+        super().__init__(name=f'{name} server')
+        self._address = host, port
+        self.start()
+
+
+class WebServer(Server):
+    def run(self) -> None:
+        server = HTTPServer(self._address, Handler)
+
+        info(f'Navigate to http://{self._address[0]}:{self._address[1]} to '
+             'visit your website.')
+
+        try:
+            server.serve_forever()
+        except KeyboardInterrupt:
+            info('Stopped.')
+        finally:
+            server.server_close()
+
+
+class SocketServer(Server):
+    @staticmethod
+    def init() -> socket:
+        return socket(AF_INET, SOCK_DGRAM)
+
+    def run(self) -> None:
+        server = self.init()
+        server.bind(self._address)
+
+        try:
+            while True:
+                content, _ = server.recvfrom(1_024)
+
+                items = content.decode().split('&')
+                items = [map(unquote_plus, item.split('=')) for item in items]
+                items = {key: value for key, value in items if value}
+
+                if items:
+                    if (path := ROOT.joinpath('storage/data.json')).exists():
+                        with open(path, encoding='utf-8') as file:
+                            try:
+                                data = load(file)
+                            except JSONDecodeError:
+                                ...
+
+                    if 'data' not in locals() or type(data) is not dict:
+                        data = {}
+
+                    # E.g.: 2022-10-29 20:20:58.020261
+                    key = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
+
+                    data[key] = items
+
+                    with open(path, 'w', encoding='utf-8') as file:
+                        dump(data, file, ensure_ascii=False, indent=2)
+        except KeyboardInterrupt:
+            info('Stopped.')
+        finally:
+            server.close()
+
+
 def main() -> None:
-    ADDRESS = ('localhost', 3000)
+    basicConfig(level=INFO, format='%(threadName)s: %(message)s')
 
-    print(f'Navigate to http://{ADDRESS[0]}:{ADDRESS[1]} to visit your '
-          'website.')
-
-    try:
-        server = HTTPServer(ADDRESS, Handler)
-        server.serve_forever()
-    except KeyboardInterrupt:
-        print('Server is stoped.')
-    finally:
-        server.shutdown()
+    WebServer('HTTP', ADDRESS[0], 3000)
+    SocketServer('Socket', *ADDRESS)
 
 
 if __name__ == '__main__':
