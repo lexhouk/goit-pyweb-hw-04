@@ -3,10 +3,10 @@
 ## Deployment
 
 ```bash
-$ docker buildx b -t oleksandr-horbatiuk/goit-pyweb-hw-04 .
-$ docker run --name oleksandr-horbatiuk-goit-pyweb-hw-04 -p 3000:3000 -v ./front-init/storage:/app/front-init/storage -d oleksandr-horbatiuk/goit-pyweb-hw-04
+$ docker buildx b -t lexhouk/goit-pyweb-hw-04 .
+$ docker run --name lexhouk-hw-04 -p 3000:3000 -v ./www/storage:/app/www/storage -d lexhouk/goit-pyweb-hw-04
 ```
 
-# Usage
+## Usage
 
 Go to http://localhost:3000.

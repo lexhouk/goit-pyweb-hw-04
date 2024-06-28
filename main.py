@@ -10,7 +10,7 @@ from socket import AF_INET, SOCK_DGRAM, socket
 from threading import Thread
 from urllib.parse import unquote_plus, urlparse
 
-ROOT = Path('front-init')
+ROOT = Path('www')
 ADDRESS = '127.0.0.1', 5000
 
 
