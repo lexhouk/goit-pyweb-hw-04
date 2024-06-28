@@ -1,4 +1,4 @@
-from abc import ABC
+from abc import ABC, abstractmethod
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from json import dump, load
@@ -49,20 +49,41 @@ class Server(ABC, Thread):
         self._address = host, port
         self.start()
 
+    def run(self) -> None:
+        self._init()
+
+        try:
+            self._up()
+        except KeyboardInterrupt:
+            info('Stopped.')
+        finally:
+            self._down()
+
+    @abstractmethod
+    def _init(self) -> None:
+        ...
+
+    @abstractmethod
+    def _up(self) -> None:
+        ...
+
+    @abstractmethod
+    def _down(self) -> None:
+        ...
+
 
 class WebServer(Server):
-    def run(self) -> None:
-        server = HTTPServer(self._address, Handler)
+    def _init(self) -> None:
+        self.__server = HTTPServer(self._address, Handler)
 
         info(f'Navigate to http://{self._address[0]}:{self._address[1]} to '
              'visit your website.')
 
-        try:
-            server.serve_forever()
-        except KeyboardInterrupt:
-            info('Stopped.')
-        finally:
-            server.server_close()
+    def _up(self) -> None:
+        self.__server.serve_forever()
+
+    def _down(self) -> None:
+        self.__server.server_close()
 
 
 class SocketServer(Server):
@@ -70,40 +91,39 @@ class SocketServer(Server):
     def init() -> socket:
         return socket(AF_INET, SOCK_DGRAM)
 
-    def run(self) -> None:
-        server = self.init()
-        server.bind(self._address)
+    def _init(self) -> None:
+        self.__server = self.init()
+        self.__server.bind(self._address)
 
-        try:
-            while True:
-                content, _ = server.recvfrom(1_024)
+    def _up(self) -> None:
+        while True:
+            content, _ = self.__server.recvfrom(1_024)
 
-                items = content.decode().split('&')
-                items = [map(unquote_plus, item.split('=')) for item in items]
-                items = {key: value for key, value in items if value}
+            items = content.decode().split('&')
+            items = [map(unquote_plus, item.split('=')) for item in items]
+            items = {key: value for key, value in items if value}
 
-                if items:
-                    if (path := ROOT.joinpath('storage/data.json')).exists():
-                        with open(path, encoding='utf-8') as file:
-                            try:
-                                data = load(file)
-                            except JSONDecodeError:
-                                ...
+            if items:
+                if (path := ROOT.joinpath('storage/data.json')).exists():
+                    with open(path, encoding='utf-8') as file:
+                        try:
+                            data = load(file)
+                        except JSONDecodeError:
+                            ...
 
-                    if 'data' not in locals() or type(data) is not dict:
-                        data = {}
+                if 'data' not in locals() or type(data) is not dict:
+                    data = {}
 
-                    # E.g.: 2022-10-29 20:20:58.020261
-                    key = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
+                # E.g.: 2022-10-29 20:20:58.020261
+                key = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
 
-                    data[key] = items
+                data[key] = items
 
-                    with open(path, 'w', encoding='utf-8') as file:
-                        dump(data, file, ensure_ascii=False, indent=2)
-        except KeyboardInterrupt:
-            info('Stopped.')
-        finally:
-            server.close()
+                with open(path, 'w', encoding='utf-8') as file:
+                    dump(data, file, ensure_ascii=False, indent=2)
+
+    def _down(self) -> None:
+        self.__server.close()
 
 
 def main() -> None:
